@@ -1,0 +1,443 @@
+module alu #(parameter REG_SIZE=8)(
+    input clk,rst,
+    input [1:0]inp_valid,
+    input mode,
+    input [3:0]cmd,
+    input ce,
+    input [REG_SIZE-1:0]opA,opB,
+    input cin,
+    output reg err,
+    output reg [(REG_SIZE*2)-1:0]res,
+    output reg oflow,cout,g,l,e
+);
+
+reg [1:0]timer;
+integer i;
+
+reg p_err;
+reg [(REG_SIZE*2)-1:0]p_res;
+reg p_oflow,p_cout,p_g,p_l,p_e;
+
+wire clock;
+
+wire [$clog2(REG_SIZE)-1:0] s_amt;
+assign s_amt= opB[$clog2(REG_SIZE)-1:0];
+
+assign clock = (ce & clk);
+
+always@(posedge clk)
+begin
+    err<=p_err;
+    res<=p_res;
+    oflow<=p_oflow;
+    cout<=p_cout;
+    g<=p_g;
+    l<=p_l;
+    e<=p_e;
+end
+
+always@(posedge clk)
+    begin
+        if(rst)
+            begin
+              p_err<=0;
+              p_res<=0;
+              p_oflow<=0;
+              p_cout<=0;
+              p_g<=0;
+              p_l<=0;
+              p_e<=0;
+              timer<=0;
+            end
+
+        else
+            begin
+            p_g<=0;
+            p_l<=0;
+            p_e<=0;
+            p_err<=0;
+            p_oflow<=0;
+            p_cout<=0;
+            p_res<=0;
+                if(mode)
+                    begin
+                        case(cmd)
+                            4'd0:
+                                begin
+                                            if(inp_valid==3)
+                                                begin
+                                                    p_res <= (opA + opB);
+                                                    if((opA+opB) > ((2**REG_SIZE)-1))
+                                                        p_cout <= 1;
+                                                end
+                                            else
+                                                begin
+                                                    p_err <= 1;
+                                                end
+                                end
+                            4'd1:
+                                        begin
+                                            if(inp_valid==3)
+                                                begin
+                                                    p_res <= (opA - opB);
+                                                    if(opB>opA)
+                                                        p_oflow <= 1;
+                                                end
+                                            else
+                                                begin
+                                                    p_err <= 1;
+                                                end
+                                        end 
+                            4'd2:
+                                begin
+                                            if(inp_valid==3)
+                                                begin
+                                                    p_res <= (opA + opB + cin);
+                                                    if((opA+opB+cin) > ((2**REG_SIZE)-1))
+                                                        p_cout <= 1;
+                                                end
+                                            else
+                                                begin
+                                                    p_err <= 1;
+                                                end
+                                end
+                            4'd3:
+                                begin
+                                            if(inp_valid==3)
+                                                begin
+                                                    p_res <= (opA - opB - cin);
+                                                    if(opA<(opB+cin))
+                                                        p_oflow <= 1;
+                                                end
+                                            else
+                                                begin
+                                                    p_err <= 1;
+                                                end
+                                        end
+                            4'd4:
+                                begin
+                                            if(inp_valid == 1 || inp_valid == 3)
+                                                begin
+                                                    p_res <= ({{(REG_SIZE){1'b0}},{(REG_SIZE){1'b1}}}) & (opA + 1);
+                                                end
+                                            else
+                                                begin
+                                                    p_err <= 1;
+                                                end
+                                end
+                            4'd5:
+                                        begin
+                                            if(inp_valid == 1 || inp_valid == 3)
+                                                begin
+                                                    p_res <= ({{(REG_SIZE){1'b0}},{(REG_SIZE){1'b1}}}) & (opA - 1);
+                                                end
+                                            else
+                                                begin
+                                                    p_err <= 1;
+                                                end
+                                        end
+                            4'd6:
+                                begin
+                                            if(inp_valid == 2 || inp_valid == 3)
+                                                begin
+                                                    p_res <= ({{(REG_SIZE){1'b0}},{(REG_SIZE){1'b1}}}) & (opB + 1);
+                                                end
+                                            else
+                                                begin
+                                                    p_err <= 1;
+                                                end
+                                end
+                            4'd7:
+                                begin
+                                            if(inp_valid == 2 || inp_valid == 3)
+                                                begin
+                                                    p_res <= ({{(REG_SIZE){1'b0}},{(REG_SIZE){1'b1}}}) & (opB - 1);
+                                                end
+                                            else
+                                                begin
+                                                    p_err <= 1;
+                                                end
+                                end
+                            4'd8:
+                                begin
+                                            if(inp_valid == 3)
+                                                begin
+                                                    if(opA>opB)
+                                                        p_g<=1;
+                                                    else if(opA<opB)
+                                                        p_l<=1;
+                                                    else
+                                                        p_e<=1;
+                                                end
+                                            else
+                                                begin
+                                                    p_err <= 1;
+                                                end
+                                end
+                            4'd9:
+                                begin 
+                                    if(timer==0)
+                                        begin
+                                          timer <= timer + 1;
+                                          p_res<={REG_SIZE{1'bx}};
+                                        end
+                                    else if(timer==1)
+                                        begin
+                                            timer<=0;
+                                            if(inp_valid == 3)
+                                            begin
+                                                p_res <= (({{(REG_SIZE){1'b0}},{(REG_SIZE){1'b1}}}) & (opB + 1)) * (({{(REG_SIZE){1'b0}},{(REG_SIZE){1'b1}}}) & (opA + 1));
+                                            end
+
+                                            else
+                                                begin
+                                                    p_err<=1;
+                                                end
+                                        end
+                                end
+                            4'd10:
+                                begin
+                                    if(timer==0)
+                                        begin
+                                          timer <= timer + 1;
+                                          p_res<={REG_SIZE{1'bx}};
+                                        end
+                                    else if(timer==1)
+                                        begin
+                                            timer<=0;
+                                            if(inp_valid == 3)
+                                            begin
+                                                //p_res <= (({{(REG_SIZE){1'b0}},{(REG_SIZE){1'b1}}}) & opA<<1) * (opB);
+                                                p_res <= (opA<<1) * (opB);
+                                            end
+                                            else
+                                                begin
+                                                    p_err<=1;
+                                                end
+                                        end
+                                end
+                            4'd11:
+                                begin
+                                            if(inp_valid == 3)
+                                                begin
+                                                    p_res <= $signed(opA) + $signed(opB);
+                                                    if($signed(opA)+$signed(opB) > (2**REG_SIZE)-1 || $signed(opA)+$signed(opB) < 0)
+                                                    begin
+                                                        p_oflow <= 1;
+                                                    end
+                                                    if($signed(opA)>$signed(opB))
+                                                            p_g<=1;
+                                                    else if($signed(opA)<$signed(opB))
+                                                            p_l<=1;
+                                                    else
+                                                            p_e<=1;
+                                                end
+                                            else
+                                                begin
+                                                    p_err <= 1;
+                                                end
+                                end
+
+                            4'd12:
+                                begin
+                                            if(inp_valid == 3)
+                                                begin
+                                                    p_res <= $signed(opA) - $signed(opB);
+                                                    if($signed(opA)-$signed(opB) > (2**REG_SIZE)-1 || $signed(opA)+$signed(opB) < 0)
+                                                            p_oflow <= 1;
+                                                    if($signed(opA)>$signed(opB))
+                                                            p_g<=1;
+                                                    else if($signed(opA)<$signed(opB))
+                                                            p_l<=1;
+                                                    else
+                                                            p_e<=1;
+                                                end
+                                            else
+                                                begin
+                                                    p_err <= 1;
+                                                end
+                                end
+
+                            endcase
+                    end
+
+                else
+                    begin
+                        case(cmd)
+                        4'd0:
+                            begin
+                                        if(inp_valid==3)
+                                            begin
+                                                p_res<=(opA&opB)&(({{(REG_SIZE){1'b0}},{(REG_SIZE){1'b1}}}));                                          
+                                            end
+                                        else
+                                            begin
+                                                p_err<=1;
+                                            end
+                            end
+                        4'd1:
+                            begin
+                                if(inp_valid==3)
+                                            begin
+                                                p_res<=(~(opA&opB))&(({{(REG_SIZE){1'b0}},{(REG_SIZE){1'b1}}}));                                          
+                                            end
+                                        else
+                                            begin
+                                                p_err<=1;
+                                            end
+                            end
+
+                        4'd2:
+                            begin
+                                if(inp_valid==3)
+                                            begin
+                                                p_res<=((opA|opB))&(({{(REG_SIZE){1'b0}},{(REG_SIZE){1'b1}}}));                                          
+                                            end
+                                        else
+                                            begin
+                                                p_err<=1;
+                                            end
+                            end
+                        4'd3:
+                            begin
+                                if(inp_valid==3)
+                                            begin
+                                                p_res<=(~(opA|opB))&(({{(REG_SIZE){1'b0}},{(REG_SIZE){1'b1}}}));                                          
+                                            end
+                                        else
+                                            begin
+                                                p_err<=1;
+                                            end
+                            end
+                        4'd4:
+                            begin
+                               if(inp_valid==3)
+                                            begin
+                                                p_res<=(opA^opB)&(({{(REG_SIZE){1'b0}},{(REG_SIZE){1'b1}}}));                                          
+                                            end
+                                        else
+                                            begin
+                                                p_err<=1;
+                                            end
+                            end
+                        4'd5:
+                            begin
+                                if(inp_valid==3)
+                                            begin
+                                                p_res<=(~(opA^opB))&(({{(REG_SIZE){1'b0}},{(REG_SIZE){1'b1}}}));                                          
+                                            end
+                                        else
+                                            begin
+                                                p_err<=1;
+                                            end
+                            end
+                        4'd6:
+                            begin
+                               if(inp_valid==3 || inp_valid==1)
+                                            begin
+                                                p_res<=(~opA)&(({{(REG_SIZE){1'b0}},{(REG_SIZE){1'b1}}}));                                          
+                                            end
+                                        else
+                                            begin
+                                                p_err<=1;
+                                            end
+                            end
+                        4'd7:
+                            begin
+                                        if(inp_valid==3 || inp_valid==2)
+                                            begin
+                                                p_res<=(~opB)&(({{(REG_SIZE){1'b0}},{(REG_SIZE){1'b1}}}));                                          
+                                            end
+                                        else
+                                            begin
+                                                p_err<=1;
+                                            end
+                            end
+                        4'd8:
+                            begin
+                                if(inp_valid==3 || inp_valid==1)
+                                            begin
+                                                p_res<=(opA>>1)&(({{(REG_SIZE){1'b0}},{(REG_SIZE){1'b1}}}));                                          
+                                            end
+                                        else
+                                            begin
+                                                p_err<=1;
+                                            end
+                            end
+                        4'd9:
+                            begin
+                                if(inp_valid==3 || inp_valid==1)
+                                            begin
+                                                p_res<=(opA<<1)&(({{(REG_SIZE){1'b0}},{(REG_SIZE){1'b1}}}));                                          
+                                            end
+                                        else
+                                            begin
+                                                p_err<=1;
+                                            end
+                            end
+                        4'd10:
+                            begin
+                               if(inp_valid==3 || inp_valid==2)
+                                            begin
+                                                p_res<=(opB>>1)&(({{(REG_SIZE){1'b0}},{(REG_SIZE){1'b1}}}));                                          
+                                            end
+                                        else
+                                            begin
+                                                p_err<=1;
+                                            end
+                            end
+                        4'd11:
+                            begin
+                                if(inp_valid==3 || inp_valid==2)
+                                            begin
+                                                p_res<=(opB>>1)&(({{(REG_SIZE){1'b0}},{(REG_SIZE){1'b1}}}));                                          
+                                            end
+                                        else
+                                            begin
+                                                p_err<=1;
+                                            end
+                            end
+
+                        4'd12:
+                            begin
+                               if(inp_valid==3)
+                                            begin
+                                                if(opB[REG_SIZE-1:$clog2(REG_SIZE)]==0 || opB[REG_SIZE-1:$clog2(REG_SIZE)]==1)
+                                                    begin
+                                                        p_res <= ( ({ {(REG_SIZE){1'b0}}, opA } << s_amt) | ({ {(REG_SIZE){1'b0}}, opA } >> (REG_SIZE - s_amt)) ) & { {(REG_SIZE){1'b0}}, {(REG_SIZE){1'b1}} };
+                                                    end    
+                                                else
+                                                    begin
+                                                        p_res <= ( ({ {(REG_SIZE){1'b0}}, opA } << s_amt) | ({ {(REG_SIZE){1'b0}}, opA } >> (REG_SIZE - s_amt)) ) & { {(REG_SIZE){1'b0}}, {(REG_SIZE){1'b1}} };
+                                                        p_err<=1;
+                                                    end                                  
+                                            end
+                                        else
+                                            begin
+                                                p_err<=1;
+                                            end
+                            end
+                        4'd13:
+                            begin
+                                if(inp_valid==3)
+                                            begin
+                                                if(opB[REG_SIZE-1:$clog2(REG_SIZE)]==0 || opB[REG_SIZE-1:$clog2(REG_SIZE)]==1)
+                                                    begin
+                                                        p_res <= ( ({ {(REG_SIZE){1'b0}}, opA } >> s_amt) | ({ {(REG_SIZE){1'b0}}, opA } << (REG_SIZE - s_amt)) ) & { {(REG_SIZE){1'b0}}, {(REG_SIZE){1'b1}} };
+                                                    end    
+                                                else
+                                                    begin
+                                                        p_res <= ( ({ {(REG_SIZE){1'b0}}, opA } >> s_amt) | ({ {(REG_SIZE){1'b0}}, opA } << (REG_SIZE - s_amt)) ) & { {(REG_SIZE){1'b0}}, {(REG_SIZE){1'b1}} };
+                                                        p_err<=1;
+                                                    end                                  
+                                            end
+                                        else
+                                            begin
+                                                p_err<=1;
+                                            end
+                                    end
+                        endcase
+                    end
+            end
+    end
+endmodule
